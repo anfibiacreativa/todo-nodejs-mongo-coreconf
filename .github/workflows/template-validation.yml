@@ -1,0 +1,89 @@
+name: Template Validation
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: |
+            src/web/package-lock.json
+            src/api/package-lock.json
+            tests/package-lock.json
+
+      - name: Install dependencies - Web
+        run: |
+          cd src/web
+          npm ci
+
+      - name: Install dependencies - API
+        run: |
+          cd src/api
+          npm ci
+
+      - name: Install dependencies - Tests
+        run: |
+          cd tests
+          npm install
+
+      - name: Lint Web
+        run: |
+          cd src/web
+          npm run lint --if-present
+
+      - name: Lint API
+        run: |
+          cd src/api
+          npm run lint --if-present
+
+      - name: Build Web
+        run: |
+          cd src/web
+          npm run build
+
+      - name: Build API
+        run: |
+          cd src/api
+          npm run build --if-present
+
+      - name: Test Web
+        run: |
+          cd src/web
+          npm test -- --coverage --watchAll=false
+
+      - name: Test API
+        run: |
+          cd src/api
+          npm test --if-present
+
+      - name: Validate Bicep files
+        uses: azure/arm-deploy@v1
+        with:
+          subscriptionId: 'dummy-sub-id'
+          resourceGroupName: 'dummy-rg'
+          template: ./infra/main.bicep
+          parameters: 'name=test location=eastus'
+          deploymentMode: Validate
+        continue-on-error: true
+
+      - name: Check required files exist
+        run: |
+          echo "Checking for required template files..."
+          test -f README.md || (echo "README.md is missing" && exit 1)
+          test -f CODE_OF_CONDUCT.md || (echo "CODE_OF_CONDUCT.md is missing" && exit 1)
+          test -f CONTRIBUTING.md || (echo "CONTRIBUTING.md is missing" && exit 1)
+          test -d .github/ISSUE_TEMPLATE || (echo ".github/ISSUE_TEMPLATE directory is missing" && exit 1)
+          echo "All required files found!"
